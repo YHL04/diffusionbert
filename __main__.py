@@ -1,62 +1,43 @@
 
+import datetime
 
-import torch
-from torch.nn.utils.rnn import pad_sequence
-
-from tqdm import tqdm
 from transformers import BertTokenizer
-
-from diffusion import DiffusionBERT
-from dataloader import DiffusionLoader
-from utils import get_word_freq
+from diffusion import DiffusionTrainer
+from models import DiffusionBERT
+from dataloader import get_dataloader
 
 
 def main(epochs=10,
-         batch_size=32
+         batch_size=1
          ):
-
-    word_freq = get_word_freq()
-
-    def process_fn_in_collate(wf):
-        return wf - wf.mean()
-
-    def collate_fn(batch_input):
-        input_ids = [torch.tensor(d['input_ids']) for d in batch_input]
-        attention_mask = [torch.tensor(d['attention_mask']) for d in batch_input]
-        word_freq_logits = [process_fn_in_collate(word_freq.gather(0, torch.tensor(d['input_ids']))) for d in batch_input]
-        input_ids = pad_sequence(input_ids, batch_first=True)
-        attention_mask = pad_sequence(attention_mask, batch_first=True)
-        word_freq_logits = pad_sequence(word_freq_logits, batch_first=True)
-        return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'word_freq_logits': word_freq_logits
-        }
+    dt = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')}.txt"
+    file = open(f"logs/{dt}", "w")
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    diffusion_bert = DiffusionBERT(T=300, tokenizer=tokenizer)
+    model = DiffusionBERT()
+    model.train()
 
-    data = DiffusionLoader(tokenizer=tokenizer).my_load(task_name="lm1b", splits=["test"])
-    dataloader = torch.utils.data.DataLoader(data,
-                                             batch_size=batch_size,
-                                             collate_fn=collate_fn,
-                                             )
-    # train_loader = torch.utils.data.DataLoader(train_data,
-    #                                            batch_size=args.batch_size,
-    #                                            collate_fn=collate_fn,
-    #                                            num_workers=4,
-    #                                            pin_memory=True,
-    #                                            sampler=train_sampler
-    #                                            )
+    diffusion_bert = DiffusionTrainer(T=300,
+                                      tokenizer=tokenizer,
+                                      model=model,
+                                      maxlen=128)
+
+    dataloader = get_dataloader(tokenizer=tokenizer,
+                                batch_size=batch_size)
 
     for epoch in range(epochs):
 
-        for i, batch in enumerate(tqdm(dataloader), 2):
+        for i, batch in enumerate(dataloader):
 
             loss = diffusion_bert.train_step(
-                x_0=batch["input_ids"],
-                target_mask=batch["attention_mask"]
+                x_0=batch["input_ids"].cuda(),
+                attention_mask=batch["attention_mask"].cuda()
             )
+
+            if i % 20 == 0:
+                print("epoch {} loss {}".format(epoch, loss))
+                file.write("{}\n".format(loss))
+                file.flush()
 
 
 if __name__ == "__main__":

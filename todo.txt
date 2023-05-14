@@ -1,0 +1,11 @@
+
+
+- finish diffusion bert model
+
+- finish training
+
+- finish testing
+
+- debug
+
+
