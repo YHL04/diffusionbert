@@ -17,12 +17,14 @@ test = DiffusionTrainer(T=T,
                         model=model,
                         maxlen=maxlen)
 
-x_t = F.one_hot(torch.tensor(102), num_classes=30522).repeat(128, 1).unsqueeze(0)
-target_mask = torch.ones((1, 128))
+print("mask_token_ids ", tokenizer.mask_token_id)
+print("pad_token_ids ", tokenizer.pad_token_id)
+x_t = F.one_hot(torch.tensor(tokenizer.mask_token_id), num_classes=30522).repeat(128, 1).unsqueeze(0).cuda()
+attention_mask = torch.ones((1, 128)).cuda()
 
 print(x_t.shape)
-print(target_mask.shape)
+print(attention_mask.shape)
 
-result = test.predict_text(x_t=x_t, target_mask=target_mask)
+result = test.predict_text(x_t=x_t, attention_mask=attention_mask)
 
 print(result)

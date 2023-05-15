@@ -9,7 +9,7 @@ from dataloader import get_dataloader
 
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = DiffusionBERT()
+model = DiffusionBERT(vocab_size=tokenizer.vocab_size)
 
 test = DiffusionTrainer(T=300,
                         tokenizer=tokenizer,
@@ -27,12 +27,19 @@ masks = batch["attention_mask"].cuda()
 print(test.convert_to_text(input_ids))
 
 x_prob = F.one_hot(input_ids, num_classes=30522)
-prob_t = test.get_qt(x_0=x_prob, t=50)
 
-# ans = x_prob * prob_t
-# ans = ans / (ans.sum(-1, keepdims=True) + 1e-10)
-
+prob_t = test.get_qt(x_0=x_prob, t=100)
 text = test.convert_to_text(categorical_sample(prob_t))
-
 print(text)
+
+prob_t = test.get_qt(x_0=x_prob, t=250)
+text = test.convert_to_text(categorical_sample(prob_t))
+print(text)
+
+
+posterior, sample, transition_probs = test.forward_step(x_0=x_prob, t=100)
+
+print(posterior.sum(-1))
+print(sample.sum(-1))
+print(transition_probs)
 

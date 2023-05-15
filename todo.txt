@@ -1,11 +1,5 @@
 
 
-- finish diffusion bert model
-
-- finish training
-
-- finish testing
-
-- debug
-
+- sum of some axis is 0
+- finish debugging
 

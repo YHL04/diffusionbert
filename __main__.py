@@ -1,5 +1,7 @@
 
 import datetime
+import torch
+import torch.nn.functional as F
 
 from transformers import BertTokenizer
 from diffusion import DiffusionTrainer
@@ -8,19 +10,19 @@ from dataloader import get_dataloader
 
 
 def main(epochs=10,
-         batch_size=1
+         batch_size=32
          ):
     dt = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')}.txt"
     file = open(f"logs/{dt}", "w")
 
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = DiffusionBERT()
+    model = DiffusionBERT(vocab_size=tokenizer.vocab_size)
     model.train()
 
-    diffusion_bert = DiffusionTrainer(T=300,
-                                      tokenizer=tokenizer,
-                                      model=model,
-                                      maxlen=128)
+    trainer = DiffusionTrainer(T=300,
+                               tokenizer=tokenizer,
+                               model=model,
+                               maxlen=128)
 
     dataloader = get_dataloader(tokenizer=tokenizer,
                                 batch_size=batch_size)
@@ -29,7 +31,7 @@ def main(epochs=10,
 
         for i, batch in enumerate(dataloader):
 
-            loss = diffusion_bert.train_step(
+            loss = trainer.train_step(
                 x_0=batch["input_ids"].cuda(),
                 attention_mask=batch["attention_mask"].cuda()
             )
@@ -38,6 +40,12 @@ def main(epochs=10,
                 print("epoch {} loss {}".format(epoch, loss))
                 file.write("{}\n".format(loss))
                 file.flush()
+
+            if i % 100 == 0:
+                x_t = F.one_hot(torch.tensor(102), num_classes=30522).repeat(128, 1).unsqueeze(0).cuda()
+                attention_mask = torch.ones((1, 128)).cuda()
+
+                print(trainer.predict_text(x_t=x_t, attention_mask=attention_mask))
 
 
 if __name__ == "__main__":

@@ -8,10 +8,10 @@ from transformers import BertForMaskedLM
 
 class DiffusionBERT(nn.Module):
 
-    def __init__(self):
+    def __init__(self, vocab_size):
         super(DiffusionBERT, self).__init__()
 
-        self.bert = BertForMaskedLM.from_pretrained('bert-base-uncased').cuda()
+        self.bert = BertForMaskedLM.from_pretrained('bert-base-uncased', num_labels=vocab_size).cuda()
         self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, x, t, attention_mask):
@@ -21,9 +21,10 @@ class DiffusionBERT(nn.Module):
         :param attention_mask: Tensor[batch_size, maxlen, vocab_size]
         :return:
         """
-        x = self.bert.forward(x, attention_mask=attention_mask)
-        x = self.softmax(x["logits"])
+        x = self.bert.forward(x, attention_mask=attention_mask)["logits"]
+        assert x.isnan().sum() == 0, x
 
+        x = self.softmax(x)
         return x
 
 
