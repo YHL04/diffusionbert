@@ -76,12 +76,14 @@ def get_dataloader(tokenizer, batch_size):
 
 
 if __name__ == "__main__":
+    print(get_word_freq()[10000:10020])
+
     # distributed sampler used for dataset in multiple gpus
-    from transformers import BertTokenizer
-
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    data = DiffusionLoader(tokenizer=tokenizer).my_load(task_name="lm1b", splits=["test"])[0]
-
-    print(data[0])
+    # from transformers import BertTokenizer
+    #
+    # tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    # data = DiffusionLoader(tokenizer=tokenizer).my_load(task_name="lm1b", splits=["test"])[0]
+    #
+    # print(data[0])
 
 

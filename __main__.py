@@ -5,12 +5,12 @@ import torch.nn.functional as F
 
 from transformers import BertTokenizer
 from diffusion import DiffusionTrainer
-from models import DiffusionBERT
+from bert import DiffusionBERT
 from dataloader import get_dataloader
 
 
-def main(epochs=10,
-         batch_size=32
+def main(epochs=1000000,
+         batch_size=1
          ):
     dt = f"{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')}.txt"
     file = open(f"logs/{dt}", "w")
@@ -30,10 +30,14 @@ def main(epochs=10,
     for epoch in range(epochs):
 
         for i, batch in enumerate(dataloader):
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
+
+            # input_ids = torch.where(input_ids == 0, input_ids, torch.full_like(input_ids, fill_value=10000))
 
             loss = trainer.train_step(
-                x_0=batch["input_ids"].cuda(),
-                attention_mask=batch["attention_mask"].cuda()
+                x_0=input_ids.cuda(),
+                attention_mask=attention_mask.cuda()
             )
 
             if i % 20 == 0:
@@ -41,11 +45,15 @@ def main(epochs=10,
                 file.write("{}\n".format(loss))
                 file.flush()
 
-            if i % 100 == 0:
+            if epoch > 4000 and epoch % 200 == 0:
                 x_t = F.one_hot(torch.tensor(102), num_classes=30522).repeat(128, 1).unsqueeze(0).cuda()
                 attention_mask = torch.ones((1, 128)).cuda()
 
                 print(trainer.predict_text(x_t=x_t, attention_mask=attention_mask))
+
+            break
+            # if i >= 101:
+            #     break
 
 
 if __name__ == "__main__":

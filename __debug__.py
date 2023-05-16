@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from transformers import BertTokenizer
 from diffusion import DiffusionTrainer, categorical_sample
-from models import DiffusionBERT
+from bert import DiffusionBERT
 from dataloader import get_dataloader
 
 
@@ -28,18 +28,29 @@ print(test.convert_to_text(input_ids))
 
 x_prob = F.one_hot(input_ids, num_classes=30522)
 
-prob_t = test.get_qt(x_0=x_prob, t=100)
-text = test.convert_to_text(categorical_sample(prob_t))
-print(text)
+# prob_t = test.get_qt(x_0=x_prob, t=100)
+# text = test.convert_to_text(categorical_sample(prob_t))
+# print(text)
+#
+# prob_t = test.get_qt(x_0=x_prob, t=250)
+# text = test.convert_to_text(categorical_sample(prob_t))
+# print(text)
 
-prob_t = test.get_qt(x_0=x_prob, t=250)
-text = test.convert_to_text(categorical_sample(prob_t))
-print(text)
+posterior, sample, transition_probs = test.forward_step(x_0=x_prob, t=50)
 
+print(test.convert_to_text(categorical_sample(posterior)))
+print(test.convert_to_text(categorical_sample(sample)))
+print(test.convert_to_text(categorical_sample(transition_probs)))
 
 posterior, sample, transition_probs = test.forward_step(x_0=x_prob, t=100)
 
-print(posterior.sum(-1))
-print(sample.sum(-1))
-print(transition_probs)
+print(test.convert_to_text(categorical_sample(posterior)))
+print(test.convert_to_text(categorical_sample(sample)))
+print(test.convert_to_text(categorical_sample(transition_probs)))
+
+posterior, sample, transition_probs = test.forward_step(x_0=x_prob, t=100)
+
+print(test.convert_to_text(categorical_sample(posterior)))
+print(test.convert_to_text(categorical_sample(sample)))
+print(test.convert_to_text(categorical_sample(transition_probs)))
 

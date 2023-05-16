@@ -4,12 +4,12 @@ import torch
 import torch.nn.functional as F
 
 from diffusion import DiffusionTrainer
-from models import DiffusionBERT
+from bert import DiffusionBERT
 from transformers import BertTokenizer
 
 T = 100
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = DiffusionBERT()
+model = DiffusionBERT(vocab_size=tokenizer.vocab_size)
 maxlen = 128
 
 test = DiffusionTrainer(T=T,
@@ -19,6 +19,8 @@ test = DiffusionTrainer(T=T,
 
 print("mask_token_ids ", tokenizer.mask_token_id)
 print("pad_token_ids ", tokenizer.pad_token_id)
+print("number ", tokenizer.convert_ids_to_tokens([10000]))
+
 x_t = F.one_hot(torch.tensor(tokenizer.mask_token_id), num_classes=30522).repeat(128, 1).unsqueeze(0).cuda()
 attention_mask = torch.ones((1, 128)).cuda()
 

@@ -12,7 +12,7 @@ from dataloader import DiffusionLoader
 from tqdm import tqdm
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-train_data = DiffusionLoader().my_load(task_name='lm1b', splits=['test'])[0]
+train_data = DiffusionLoader(tokenizer=tokenizer).my_load(task_name='lm1b', splits=['test'])[0]
 
 word_freq = torch.zeros((tokenizer.vocab_size,), dtype=torch.int64)
 

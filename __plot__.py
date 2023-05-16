@@ -11,6 +11,7 @@ data = pd.read_csv(latestfile,
                    )
 
 plt.subplot(1, 1, 1)
+plt.yscale("log")
 plt.plot(data["loss"])
 plt.plot(data["loss"].rolling(200).mean())
 

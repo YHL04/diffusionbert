@@ -2,9 +2,11 @@
 
 import torch
 import torch.nn.functional as F
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 
 import math
+
+from dataloader import get_word_freq
 
 
 def linear_beta_schedule(timesteps, beta_start=0.0001, beta_end=0.02, device="cuda"):
@@ -12,6 +14,7 @@ def linear_beta_schedule(timesteps, beta_start=0.0001, beta_end=0.02, device="cu
     linear schedule, proposed in original ddpm paper
     """
     return torch.linspace(beta_start, beta_end, timesteps, dtype=torch.float32)
+
 
 def mutual_beta_schedule(timesteps, device="cuda"):
     """
@@ -65,12 +68,12 @@ class DiffusionTrainer:
                               ).unsqueeze(1).repeat(1, vocab_size).float()
 
         # word freq
-        self.word_freq = torch.load(f'./word_freq/bert-base-uncased_lm1b.pt').to(torch.float32).cuda()
+        self.word_freq = get_word_freq().cuda()
         # word_freq_lambda * sin wave from 0 to pi interval across time-steps, Tensor[T + 1]
         self.word_freq_lambda = word_freq_lambda * torch.sin(torch.arange(T + 1, device=self.device) / T * math.pi)
 
         # optimizer
-        self.optimizer = Adam(self.model.parameters(), lr=1e-4)
+        self.optimizer = Adam(self.model.parameters(), lr=1e-7)
 
     def get_qt(self, x_0, t):
         """
@@ -91,20 +94,19 @@ class DiffusionTrainer:
 
         # get frequency of each word as another tensor and normalize between -0.5 to 0.5
         # then multiply by word_freq_lambda of current timestep
-        # word_freq_logits = self.word_freq.repeat(x_0.size(0), 1).gather(1, x_0.argmax(-1))
-        # word_freq_logits = word_freq_logits - word_freq_logits.mean(-1, keepdims=True)
-        # word_freq_probs = word_freq_logits.unsqueeze(-1) * self.word_freq_lambda[t]
+        word_freq_logits = self.word_freq.repeat(x_0.size(0), 1).gather(1, x_0.argmax(-1))
+        word_freq_logits = word_freq_logits - word_freq_logits.mean(-1, keepdims=True)
+        word_freq_probs = word_freq_logits.unsqueeze(-1) * self.word_freq_lambda[t]
         # print(word_freq_probs)
 
         # adding word_freq_probs to p makes infrequent word more likely and frequent word less likely
         # p has to be bigger than 0 to avoid nans
 
-        # p = torch.clip(p + word_freq_probs, 0.001, 0.999)
-        p = torch.clip(p, 0.001, 0.999)
+        p = torch.clip(p + word_freq_probs, 0.001, 0.999)
+        # p = torch.clip(p, 0.001, 0.999)
 
         # Tensor[batch_size, maxlen, vocab_size]
         non_mask_prob = p * x_0
-        print(non_mask_prob.shape)
 
         # mask_prob = 1. - sum(non_mask_prob) + mask_token_id
         mask_prob = 1. - non_mask_prob.sum(-1, keepdims=True) + non_mask_prob[..., self.mask_token_id].unsqueeze(-1)
@@ -165,8 +167,15 @@ class DiffusionTrainer:
             transition_probs = self.get_transition_probs(samples, t)
 
         posterior = prob_t * transition_probs
+
         # cannot divide by zero (causes nan)
-        posterior = posterior / (posterior.sum(-1, keepdims=True) + 1e-10)
+        # print('sum contain zero ', (posterior.sum(-1) == 0).any())
+
+        if (posterior / posterior.sum(-1, keepdims=True)).isnan().sum() != 0:
+            print("warning encountered nans, something is wrong")
+
+        # posterior = posterior / (posterior.sum(-1, keepdims=True) + 1e-10)
+        posterior = posterior / posterior.sum(-1, keepdims=True)
 
         assert posterior.isnan().sum() == 0
         return posterior, samples, transition_probs
@@ -175,7 +184,7 @@ class DiffusionTrainer:
         """
         :param x_t1: x_{t+1}
                      Tensor[batch_size, maxlen, vocab_size]
-        :param t: int
+        :param t1: int
         :param attention_mask:
         :param transition_probs:
 
@@ -189,7 +198,7 @@ class DiffusionTrainer:
         probs = self.model(categorical_sample(x_t1), t=t1, attention_mask=attention_mask)
         assert probs.isnan().sum() == 0
 
-        probs, _, _ = self.forward_step(x_0=probs, t=t1-1, transition_probs=transition_probs)
+        # probs, _, _ = self.forward_step(x_0=probs, t=t1-1, transition_probs=transition_probs)
 
         return probs
 
@@ -201,9 +210,21 @@ class DiffusionTrainer:
         x_t = one hot of ids at x
         p_t = probabilities of ids at x
 
+        default parameters:
+            - predict_x0 = True
+            - log_space = False
+            - use_cached_transition = True
+
+        pseudocode:
+            - q_t, x_t_plus_1, transition_probs = sample_and_compute_posterior_q()
+            - p_t = p_forward()
+            - kl = kl_divergence_with_probs(q_t, p_t)
+
         """
         # get random timestep t
-        t = torch.randint(0, self.T-1, size=(1,))
+        # exclude 299 because t+1 will be out of bounds
+        # exclude 298 because ids are all zeros
+        t = torch.randint(0, self.T-2, size=(1,))
 
         # turn Tensor[batch_size, maxlen] into Tensor[batch_size, maxlen, vocab_size]
         x_0 = F.one_hot(x_0, self.vocab_size).reshape(x_0.shape + (self.vocab_size,))
@@ -214,8 +235,11 @@ class DiffusionTrainer:
         # predicted x_t from x_{t+1}
         p_t = self.backward_step(x_t1, t+1, attention_mask, transition_probs)
 
-        loss = self.get_loss(probs=p_t, targets=x_0)
-        loss = loss.mean()
+        # print(self.convert_to_text(categorical_sample(x_t1)))
+        # print(self.convert_to_text(categorical_sample(p_t)))
+
+        loss = self.get_loss(probs=p_t, targets=x_0, attention_mask=attention_mask)
+        loss = loss.sum()
         loss.backward()
 
         torch.nn.utils.clip_grad_value_(self.model.parameters(), 0.1)
@@ -223,7 +247,7 @@ class DiffusionTrainer:
 
         return loss.item()
 
-    def get_loss(self, probs, targets, epsilon=1e-20):
+    def get_loss(self, probs, targets, attention_mask, epsilon=1e-20):
         """
         kl divergence with probs
 
@@ -232,7 +256,14 @@ class DiffusionTrainer:
         assert probs.isnan().sum() == 0
         assert targets.isnan().sum() == 0
 
-        kl = (probs * (torch.log(probs + epsilon) - torch.log(targets + epsilon))).sum(-1)
+        # loss = F.kl_div(probs, targets)
+
+        # print('probs ', self.convert_to_text(categorical_sample(probs)))
+        # print('targets ', self.convert_to_text(categorical_sample(targets)))
+
+        log_probs = torch.log(probs + epsilon)
+        log_targets = torch.log(targets + epsilon)
+        kl = torch.sum(probs * (log_probs - log_targets), axis=-1)
 
         # KL divergence should be positive, this helps with numerical stability
         loss = F.relu(kl)
@@ -276,24 +307,26 @@ class DiffusionTrainer:
 
 
 if __name__ == "__main__":
-    from transformers import BertTokenizer, BertForMaskedLM
-    from models import DiffusionBERT
+    pass
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = DiffusionBERT()
-
-    test = DiffusionTrainer(T=100,
-                            tokenizer=tokenizer,
-                            model=model,
-                            maxlen=128
-                            )
+    # from transformers import BertTokenizer, BertForMaskedLM
+    # from models import DiffusionBERT
+    #
+    # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    # model = DiffusionBERT()
+    #
+    # test = DiffusionTrainer(T=100,
+    #                         tokenizer=tokenizer,
+    #                         model=model,
+    #                         maxlen=128
+    #                         )
     # posterior, sample, transition_probs = test.forward_step(
     #     x_0=torch.randint(low=0, high=30522, size=(2, 512)).to(torch.int64).cuda(),
     #     t=10
     # )
 
-    loss = test.train_step(x_0=torch.randint(low=0, high=30522, size=(2, 512)).cuda(),
-                           attention_mask=torch.ones((2, 512)).cuda())
+    # loss = test.train_step(x_0=torch.randint(low=0, high=30522, size=(2, 512)).cuda(),
+    #                        attention_mask=torch.ones((2, 512)).cuda())
 
     # print(posterior)
     # print(sample)

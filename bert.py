@@ -3,13 +3,14 @@
 import torch
 import torch.nn as nn
 
-from transformers import BertForMaskedLM
+from models.modeling_bert import BertForMaskedLM
 
 
 class DiffusionBERT(nn.Module):
 
     def __init__(self, vocab_size):
         super(DiffusionBERT, self).__init__()
+        self.vocab_size = vocab_size
 
         self.bert = BertForMaskedLM.from_pretrained('bert-base-uncased', num_labels=vocab_size).cuda()
         self.softmax = nn.Softmax(dim=-1)
@@ -21,7 +22,15 @@ class DiffusionBERT(nn.Module):
         :param attention_mask: Tensor[batch_size, maxlen, vocab_size]
         :return:
         """
-        x = self.bert.forward(x, attention_mask=attention_mask)["logits"]
+        assert x.isnan().sum() == 0, x
+        # assert x.sum() != 0, t
+        # print("input ", x)
+
+        x = self.bert.forward(x)["logits"]
+        # x = self.bert.forward(x, attention_mask=attention_mask)["logits"]
+        # print("vocab size ", self.vocab_size)
+        # print(x.shape)
+        # print("output ", x)
         assert x.isnan().sum() == 0, x
 
         x = self.softmax(x)

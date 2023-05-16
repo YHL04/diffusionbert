@@ -1,5 +1,8 @@
 
 
-- sum of some axis is 0
+- bert output nan
+- sum of some axis is 0 (added epsilon for workaround)
+- understand kl loss?
+-
 - finish debugging
 
