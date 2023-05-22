@@ -4,7 +4,7 @@
 A crude effort to reimplement DiffusionBERT
 
 
-Resources:
+## Resources:
 
 
 D3PM paper: https://arxiv.org/pdf/2107.03006.pdf
