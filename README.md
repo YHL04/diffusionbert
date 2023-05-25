@@ -3,6 +3,7 @@
 
 A crude effort to reimplement DiffusionBERT
 
+Training does not work yet...
 
 ## Resources:
 
